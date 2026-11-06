@@ -76,3 +76,8 @@ Cocok untuk	Semua pengguna, termasuk yang baru mulai	Yang ingin mendorong perfor
 - Gunakan debloat level yang sesuai — hard bisa mematikan layanan yang Anda butuhkan.
 
 - Memory Release bersifat sementara; memori bisa terisi kembali seiring penggunaan.
+
+
+## Developer and his lover girl
+> Coding backend : My girl sheila **8kittenoel** On tiktok
+> Coder + Founder : *Claude AI* + Me **@xander🏄🏻**
