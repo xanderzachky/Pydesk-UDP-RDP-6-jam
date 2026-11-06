@@ -1,7 +1,5 @@
 # Pydesk
 
-[![License]
-
 > RDP ringan berbasis Tailscale untuk coding dan game ringan — praktis, cepat, dan siap dipakai.
 
 ## 📖 Tentang Pydesk
