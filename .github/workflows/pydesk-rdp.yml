@@ -1,0 +1,132 @@
+name: Pydesk RDP
+
+on:
+  workflow_dispatch:
+    inputs:
+      debloat:
+        description: 'Debloat level'
+        type: choice
+        options:
+          - off
+          - light
+          - hard
+          - hardcoded
+        default: light
+      anti_vm:
+        description: 'Run anti-VM detection cleanup'
+        type: boolean
+        default: false
+      memory_release:
+        description: 'Free RAM by trimming working sets and stopping non-essential services'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pydesk-rdp
+  cancel-in-progress: false
+
+jobs:
+  rdp:
+    name: Windows RDP + Tailscale
+    runs-on: windows-latest
+    timeout-minutes: 360
+    env:
+      TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+    steps:
+      - name: Prepare Windows runner
+        shell: powershell
+        run: |
+          $chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+          $password = (-join (1..14 | ForEach-Object { $chars[(Get-Random -Maximum $chars.Length)] })) + '!Aa9'
+          net user runneradmin $password
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Value 1
+          Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+          "RDP_PASSWORD=$password" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Output "Remote Desktop enabled for runneradmin"
+
+      - name: Install Tailscale
+        shell: powershell
+        run: |
+          $msi = Join-Path $env:TEMP 'tailscale.msi'
+          Invoke-WebRequest -Uri 'https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi' -OutFile $msi -UseBasicParsing
+          Start-Process msiexec.exe -ArgumentList '/i', $msi, '/qn', '/norestart' -Wait
+          Write-Output "Tailscale installed"
+
+      - name: Join tailnet
+        shell: powershell
+        run: |
+          $ts = Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'
+          & $ts up --authkey $env:TAILSCALE_AUTH_KEY --hostname "pydesk-$env:GITHUB_RUN_ID" --accept-routes --timeout 180s
+          & $ts status
+
+      - name: Debloat (${{ inputs.debloat }})
+        if: ${{ inputs.debloat != 'off' }}
+        shell: powershell
+        run: |
+          $level = '${{ inputs.debloat }}'
+          if ($level -eq 'light') {
+            $apps = @('Microsoft.BingNews','Microsoft.BingWeather','MicrosoftSolitaireCollection','Microsoft.WindowsCommunicationsApps','Microsoft.People','Microsoft.ZuneMusic','Microsoft.ZuneVideo','king.com.CandyCrushSaga')
+            foreach ($a in $apps) { Get-AppxPackage -Name $a -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue }
+          } elseif ($level -eq 'hard') {
+            $apps = @('Microsoft.BingNews','Microsoft.BingWeather','MicrosoftSolitaireCollection','Microsoft.WindowsCommunicationsApps','Microsoft.People','Microsoft.ZuneMusic','Microsoft.ZuneVideo','king.com.CandyCrushSaga','Microsoft.MicrosoftOfficeHub','Microsoft.Office.OneNote','Microsoft.WindowsFeedbackHub','Microsoft.GetHelp','Microsoft.Getstarted','Microsoft.Microsoft3DViewer','Microsoft.OneConnect','Microsoft.SkypeApp','Microsoft.Wallet','Microsoft.WindowsMaps','Microsoft.XboxGamingOverlay','Microsoft.YourPhone','Microsoft.WindowsSoundRecorder')
+            foreach ($a in $apps) { Get-AppxPackage -Name $a -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue }
+            Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -match 'Bing|Candy|Skype|Zune|Solitaire|Xbox|Feedback|Maps|YourPhone|OneConnect|Wallet|GetHelp|GetStarted' } | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+          } elseif ($level -eq 'hardcoded') {
+            iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/Sycnex/Windows10Debloater/master/Windows10Debloater.ps1'))
+          }
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' -Name 'NoAutoUpdate' -Value 1 -ErrorAction SilentlyContinue
+          Write-Output "Debloat complete ($level)"
+
+      - name: Anti-VM detection
+        if: ${{ inputs.anti_vm }}
+        shell: powershell
+        run: |
+          $new = 'DESKTOP-' + (-join (1..6 | ForEach-Object { Get-Random -Minimum 0 -Maximum 10 }))
+          Rename-Computer -NewName $new -Force -ErrorAction SilentlyContinue
+          New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OEMInformation' -Force | Out-Null
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OEMInformation' -Name 'Manufacturer' -Value 'Dell Inc.' -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OEMInformation' -Name 'Model' -Value 'XPS 15 9500' -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\vmick' -Name 'Start' -Value 4 -ErrorAction SilentlyContinue
+          reg add 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion' /v InstallationType /t REG_SZ /d 'Client' /f | Out-Null
+          Write-Output "Anti-VM applied"
+
+      - name: Memory release
+        if: ${{ inputs.memory_release }}
+        shell: powershell
+        run: |
+          $signature = '[DllImport("psapi.dll")] public static extern int EmptyWorkingSet(IntPtr hProcess);'
+          $type = Add-Type -MemberDefinition $signature -Name Win32 -Namespace PInvoke -PassThru
+          Get-Process | ForEach-Object { try { $type::EmptyWorkingSet($_.Handle) | Out-Null } catch {} }
+          Set-Service SysMain -StartupType Disabled -ErrorAction SilentlyContinue
+          Stop-Service SysMain -Force -ErrorAction SilentlyContinue
+          Start-Process -FilePath rundll32.exe -ArgumentList 'advapi32.dll,ProcessIdleTasks' -NoNewWindow -Wait
+          $free = (Get-CimInstance -ClassName Win32_OperatingSystem).FreePhysicalMemory / 1024
+          Write-Output "Memory released. Free: $([math]::Round($free,0)) MB"
+
+      - name: Display Connection Details
+        shell: powershell
+        run: |
+          $ts = Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'
+          $ip = (& $ts ip -4 | Select-Object -First 1)
+          Write-Output "PYDESK_CONNECTION_DETAILS"
+          Write-Output "HOSTNAME: pydesk-$env:GITHUB_RUN_ID"
+          Write-Output "IP: $ip"
+          Write-Output "USERNAME: runneradmin"
+          Write-Output "PASSWORD: $env:RDP_PASSWORD"
+          Write-Output "PORT: 3389"
+          Write-Output "EXPIRES: 6 hours from session start"
+          Write-Output "PYDESK_CONNECTION_DETAILS_END"
+          Write-Output "## Pydesk session ready" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Write-Output "| Field | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Write-Output "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Write-Output "| Address | $ip:3389 |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Write-Output "| Username | runneradmin |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Write-Output "| Password | $env:RDP_PASSWORD |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Keep session alive
+        shell: powershell
+        run: Start-Sleep -Seconds 21600
