@@ -16,6 +16,11 @@ Cocok untuk:
 
 Pydesk X adalah performance booster untuk `Pydesk` basic , menyediakan berbagai menu.
 
+[Pydesk Spesifikasi]
+**2 vCPU**
+**8 GB**
+**150 GB**
+
 > ⚠️ **Catatan kompatibilitas:** Roblox Studio **Dapat berjalan** , Roblox windows **tidak dapat berjalan** di Pydesk karena terdeteksi sebagai VM oleh sistem anti-cheat Roblox. Ini adalah batasan platform, bukan bug Pydesk.
 
 ## ✨ Fitur
@@ -39,7 +44,8 @@ Pydesk X adalah performance booster untuk `Pydesk` basic , menyediakan berbagai 
   - 5.Siapkan Keys `Tailscale`
     > Ambil dari Tailscale (Wajib login di github akun yang akan dipakai) , di setting lalu buat new `keys` , Generate `Auth keys` lalu salin dan simpan dengan aman!
   - 6.Paste ke TAILSCALE_AUTH_KEY di bagian `Secrets` di Pydesk website.
-  - 7.RDP siap digunakan.
+  - 7.Cek apakah sudah berhasil.
+  - 8.**Pydesk RDP** siap digunakan.
 
 - Silahkan pergi ke https://pydesk-core-flow.base44.app/workspace untuk custom agent rdp pydesk
   > ⚠️ Experience User Only/kalau masih awam dalam Pydesk maka dianjurkan untuk melihat di tiktok @8kittenoell_ untuk caranya.
