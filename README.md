@@ -1,6 +1,6 @@
 # Pydesk
 
-[![License](https://img.shields.io/github/license/[xanderzachky]/[Pydesk-UDP-RDP-6-jam])](LICENSE)
+[![License]
 
 > RDP ringan berbasis Tailscale untuk coding dan game ringan — praktis, cepat, dan siap dipakai.
 
